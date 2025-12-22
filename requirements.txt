@@ -1,4 +1,0 @@
-llama-index
-chromadb
-fast-graphrag
-ollama
