@@ -8,7 +8,7 @@ from langchain.text_splitter import MarkdownTextSplitter, RecursiveCharacterText
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS as LangchainFAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama, OllamaLLM
 from langchain.memory import ConversationBufferMemory
 import faiss
 
@@ -16,7 +16,7 @@ VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss.pkl")
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-CHAT_MODEL_NAME = "qwen3:0.6b"
+CHAT_MODEL_NAME = "llama3.2:latest"
 
 
 def show_info(vector_store_path=VECTOR_STORE_PATH):
@@ -122,34 +122,45 @@ class RAGChat:
         self.faiss_store = faiss_store
         self.vectorstore = faiss_store.as_langchain_faiss()
         self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": top_k})
-        self.llm = ChatOllama(model=CHAT_MODEL_NAME)
+        self.llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
         self.memory = ConversationBufferMemory(
             memory_key="chat_history", return_messages=True
         )
         self._streamed_text = ""
         self.top_k = top_k
 
-    # Streaming callback removed
+    def _process_question(self, question: str):
+        # Retrieve top docs with scores
+        results = self.vectorstore.similarity_search_with_score(question, k=self.top_k)
+        docs = [doc for doc, score in results]
+        scores = [score for doc, score in results]
+        sources = [f"[s{idx}] "+doc.page_content for idx, doc in enumerate(docs,1)]
+        # Compose context for LLM
+        context = "\n---\n".join(sources)
+        prompt = (
+            "You are a helpful assistant. Use the following context to answer the question.\n"
+            "When you make a factual statement supported by a source, append the corresponding [sX] tag at the end of the sentence.\n"
+            f"Sources:\n{context}\n\nQuestion: {question}\nAnswer:"
+        )
+        print("AI: ", end="", flush=True)
+        for chunk in self.llm.stream(prompt):
+            print(chunk, end="", flush=True)
+        print()  # Newline after completion
+        print("\nSources:")
+        for i, (src, score) in enumerate(zip(sources, scores), 1):
+            print(f"(score: {score:.4f}) {src}".replace("\n", " "))
 
     def chat(self):
         print(
             f"Entering chat mode. Type 'exit' to quit. Showing top {self.top_k} sources."
         )
         while True:
-            question = input("You: ")
+            question = input("\nYou: ")
             if question.strip().lower() == "exit":
                 print("Exiting chat mode.")
                 break
-            # Retrieve top docs
-            docs = self.retriever.invoke(question)
-            sources = [doc.page_content for doc in docs]
-            # Get LLM answer (no streaming)
-            print("AI: ", end="", flush=True)
-            response = self.llm.invoke(question)
-            print(response.content)
-            print("\nSources:")
-            for i, src in enumerate(sources, 1):
-                print("[{i}] {src}".format(i=i, src=src.replace("\n", " ")))
+            self._process_question(question)
+            
 
 
 if __name__ == "__main__":
