@@ -6,7 +6,6 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import MarkdownTextSplitter, RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
-from langchain_community.vectorstores import FAISS as LangchainFAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama, OllamaLLM
 from langchain.memory import ConversationBufferMemory
@@ -46,7 +45,6 @@ def show_info(vector_store_path=VECTOR_STORE_PATH):
 
 class FaissVectorStore:
     def __init__(self, model_name: str = EMBEDDING_MODEL_NAME):
-        self.model_name = model_name
         self.model = SentenceTransformer(model_name)
         self.index = None
         self.texts = []
@@ -73,14 +71,14 @@ class FaissVectorStore:
                 chunks = splitter.split_text(text)
                 for chunk in chunks:
                     texts.append(chunk)
-                    emb = self.model.encode(
-                        chunk, convert_to_numpy=True, normalize_embeddings=True
-                    )
+                    emb = self.model.encode(chunk, convert_to_numpy=True)
                     embeddings.append(emb)
         if not embeddings:
             print("No files matched.")
             return
         embeddings = np.stack(embeddings).astype("float32")
+        # Normalize embeddings for cosine similarity
+        faiss.normalize_L2(embeddings)
         dim = embeddings.shape[1]
         self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings)
@@ -89,6 +87,20 @@ class FaissVectorStore:
         print(
             f"Ingested {len(texts)} chunks from {len(files)} files into the FAISS vector store."
         )
+
+    def retrieve(self, query: str, top_k: int = 5):
+        # Encode and normalize the query
+        q_emb = self.model.encode([query], convert_to_numpy=True).astype("float32")
+        faiss.normalize_L2(q_emb)
+        # Search FAISS index
+        scores, indices = self.index.search(q_emb, top_k)
+        # Return (text, score) pairs
+        results = []
+        for idx, score in zip(indices[0], scores[0]):
+            if idx >= 0:
+                if score > 0.2:
+                    results.append((self.texts[idx], score))
+        return results
 
     def save(self, path: str = VECTOR_STORE_PATH):
         with open(path, "wb") as f:
@@ -108,34 +120,20 @@ class FaissVectorStore:
             self.texts = data["texts"]
             self.embeddings = data["embeddings"]
 
-    def as_langchain_faiss(self):
-        # Properly initialize LangchainFAISS from documents and embeddings
-        embedding_model = HuggingFaceEmbeddings(model_name=self.model_name)
-        # Create Document objects for each chunk
-        docs = [Document(page_content=txt) for txt in self.texts]
-        # Use from_documents to create the vector store
-        return LangchainFAISS.from_documents(docs, embedding_model)
-
 
 class RAGChat:
     def __init__(self, faiss_store: FaissVectorStore, top_k):
         self.faiss_store = faiss_store
-        self.vectorstore = faiss_store.as_langchain_faiss()
-        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": top_k})
-        self.llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history", return_messages=True
-        )
-        self._streamed_text = ""
         self.top_k = top_k
+        self.llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
 
     def _process_question(self, question: str):
-        # Retrieve top docs with scores
-        results = self.vectorstore.similarity_search_with_score(question, k=self.top_k)
-        docs = [doc for doc, score in results]
-        scores = [score for doc, score in results]
-        sources = [f"[s{idx}] "+doc.page_content for idx, doc in enumerate(docs,1)]
-        # Compose context for LLM
+        # Retrieve top chunks and scores using only FAISS
+        results = self.faiss_store.retrieve(question, self.top_k)
+        if len(results) == 0:
+            print("It seems I am not capable of answering that question.")
+            return
+        sources = [f"[s{idx}] " + text for idx, (text, score) in enumerate(results, 1)]
         context = "\n---\n".join(sources)
         prompt = (
             "You are a helpful assistant. Use the following context to answer the question.\n"
@@ -147,7 +145,7 @@ class RAGChat:
             print(chunk, end="", flush=True)
         print()  # Newline after completion
         print("\nSources:")
-        for i, (src, score) in enumerate(zip(sources, scores), 1):
+        for i, (src, (_, score)) in enumerate(zip(sources, results), 1):
             print(f"(score: {score:.4f}) {src}".replace("\n", " "))
 
     def chat(self):
@@ -160,7 +158,6 @@ class RAGChat:
                 print("Exiting chat mode.")
                 break
             self._process_question(question)
-            
 
 
 if __name__ == "__main__":
