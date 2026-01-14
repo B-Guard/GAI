@@ -3,6 +3,18 @@
 ## Developers installation
 Python 3.12, don't forget to create new virtual env. `pip install -r requirements.txt`.
 
+## Usage
+
+Ingest documents:
+```bash
+python rag_hybrid.py ingest "data/*.txt"
+```
+
+Start chat:
+```bash
+python rag_hybrid.py chat
+```
+
 ## Project Plan
 
 RAG setup:

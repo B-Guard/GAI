@@ -4,11 +4,13 @@ import pickle
 import argparse
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from langchain.text_splitter import MarkdownTextSplitter, RecursiveCharacterTextSplitter
+from langchain_text_splitters import (
+    MarkdownTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama, OllamaLLM
-from langchain.memory import ConversationBufferMemory
 import faiss
 
 VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss.pkl")
