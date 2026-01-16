@@ -13,13 +13,16 @@ import faiss
 from rank_bm25 import BM25Okapi
 import re
 
+from dotenv import load_dotenv
+load_dotenv()
+
 VECTOR_STORE_PATH = os.path.join("data", "vector_store_hybrid.pkl")
-CHUNK_SIZE = 1200
-CHUNK_OVERLAP = 200
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-CHAT_MODEL_NAME = "llama3.2:latest"
-SEMANTIC_WEIGHT = 0.7
-KEYWORD_WEIGHT = 0.3
+CHUNK_SIZE = os.getenv("CHUNK_SIZE")
+CHUNK_OVERLAP = os.getenv("CHUNK_OVERLAP")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME")
+CHAT_MODEL_NAME = os.getenv("CHAT_MODEL_NAME")
+SEMANTIC_WEIGHT = float(os.getenv("SEMANTIC_WEIGHT"))
+KEYWORD_WEIGHT = float(os.getenv("KEYWORD_WEIGHT"))
 
 
 def show_info(vector_store_path=VECTOR_STORE_PATH):

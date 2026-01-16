@@ -13,12 +13,16 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama, OllamaLLM
 import faiss
 
-VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss.pkl")
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-CHAT_MODEL_NAME = "llama3.2:latest"
+from dotenv import load_dotenv
+load_dotenv()
 
+VECTOR_STORE_PATH = os.path.join("data", "vector_store.pkl")
+CHUNK_SIZE = os.getenv("CHUNK_SIZE")
+CHUNK_OVERLAP = os.getenv("CHUNK_OVERLAP")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME")
+CHAT_MODEL_NAME = os.getenv("CHAT_MODEL_NAME")
+SEMANTIC_WEIGHT = float(os.getenv("SEMANTIC_WEIGHT"))
+KEYWORD_WEIGHT = float(os.getenv("KEYWORD_WEIGHT"))
 
 def show_info(vector_store_path=VECTOR_STORE_PATH):
     print("--- Vector Store Info ---")
