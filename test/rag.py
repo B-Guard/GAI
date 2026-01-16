@@ -16,9 +16,9 @@ import faiss
 from dotenv import load_dotenv
 load_dotenv()
 
-VECTOR_STORE_PATH = os.path.join("data", "vector_store.pkl")
-CHUNK_SIZE = os.getenv("CHUNK_SIZE")
-CHUNK_OVERLAP = os.getenv("CHUNK_OVERLAP")
+VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss.pkl")
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP"))
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME")
 CHAT_MODEL_NAME = os.getenv("CHAT_MODEL_NAME")
 SEMANTIC_WEIGHT = float(os.getenv("SEMANTIC_WEIGHT"))
@@ -50,16 +50,24 @@ def show_info(vector_store_path=VECTOR_STORE_PATH):
 
 
 class FaissVectorStore:
-    def __init__(self, model_name: str = EMBEDDING_MODEL_NAME):
+    def __init__(self, model_name: str = EMBEDDING_MODEL_NAME, vector_store_path: str = VECTOR_STORE_PATH):
         self.model = SentenceTransformer(model_name)
         self.index = None
         self.texts = []
         self.embeddings = None
+        self.vector_store_path = vector_store_path
+        # Try to load existing vector store if it exists
+        if os.path.exists(self.vector_store_path):
+            try:
+                self.load(self.vector_store_path)
+                print(f"Loaded existing vector store from {self.vector_store_path}")
+            except Exception as e:
+                print(f"Warning: Could not load vector store: {e}")
 
     def ingest(self, file_pattern: str):
-        files = glob.glob(file_pattern)
-        texts = []
-        embeddings = []
+        files = glob.glob(file_pattern, recursive=True)
+        new_texts = []
+        new_embeddings = []
         for file in files:
             with open(file, "r", encoding="utf-8") as f:
                 text = f.read()
@@ -76,22 +84,28 @@ class FaissVectorStore:
                     )
                 chunks = splitter.split_text(text)
                 for chunk in chunks:
-                    texts.append(chunk)
+                    new_texts.append(chunk)
                     emb = self.model.encode(chunk, convert_to_numpy=True)
-                    embeddings.append(emb)
-        if not embeddings:
+                    new_embeddings.append(emb)
+        if not new_embeddings:
             print("No files matched.")
             return
-        embeddings = np.stack(embeddings).astype("float32")
-        # Normalize embeddings for cosine similarity
-        faiss.normalize_L2(embeddings)
-        dim = embeddings.shape[1]
-        self.index = faiss.IndexFlatIP(dim)
-        self.index.add(embeddings)
-        self.texts = texts
-        self.embeddings = embeddings
+        new_embeddings = np.stack(new_embeddings).astype("float32")
+        faiss.normalize_L2(new_embeddings)
+        # If index exists, add to it; else, create new
+        if self.index is not None and self.embeddings is not None and len(self.texts) > 0:
+            # Concatenate texts and embeddings
+            self.texts.extend(new_texts)
+            self.embeddings = np.vstack([self.embeddings, new_embeddings])
+            self.index.add(new_embeddings)
+        else:
+            dim = new_embeddings.shape[1]
+            self.index = faiss.IndexFlatIP(dim)
+            self.index.add(new_embeddings)
+            self.texts = new_texts
+            self.embeddings = new_embeddings
         print(
-            f"Ingested {len(texts)} chunks from {len(files)} files into the FAISS vector store."
+            f"Ingested {len(new_texts)} chunks from {len(files)} files into the FAISS vector store."
         )
 
     def retrieve(self, query: str, top_k: int = 5):
@@ -223,12 +237,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if args.command == "ingest":
-        store = FaissVectorStore(model_name=args.model)
+        store = FaissVectorStore(model_name=args.model, vector_store_path=args.vector_store)
         store.ingest(args.pattern)
         store.save(args.vector_store)
     elif args.command == "chat":
-        store = FaissVectorStore(model_name=args.model)
-        store.load(args.vector_store)
+        store = FaissVectorStore(model_name=args.model, vector_store_path=args.vector_store)
         chat = RAGChat(store, top_k=args.top_k)
         chat.chat()
     elif args.command == "show":
