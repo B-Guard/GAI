@@ -1,0 +1,21 @@
+## Neo4j GraphRAG – Setup & Ingestion
+
+### 1. Start Neo4j (Docker)
+Neo4j is run via Docker Desktop.
+
+```bash
+docker start neo4j-gai
+
+Neo4j Browser will be available at:
+http://localhost:7474
+
+
+### 2. Create a .env file using example file
+
+### 3. To ingest graph with new txt files:
+$env:DO_INGEST="1" # Boolean variable
+python test\graphrag_w_neo4j.py
+
+### 4. To call chat without ingesting:
+Remove-Item Env:DO_INGEST -ErrorAction SilentlyContinue
+python test\graphrag_w_neo4j.py
