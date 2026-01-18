@@ -2,10 +2,11 @@ import os
 import json
 import glob
 import asyncio
+import re
 from tqdm import tqdm
 from tqdm.asyncio import tqdm as atqdm
 from neo4j import GraphDatabase
-from neo4j_graphrag.retrievers import VectorRetriever, Text2CypherRetriever
+from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.generation import GraphRAG, RagTemplate
 from neo4j_graphrag.llm import OllamaLLM as Neo4jOllamaLLM, VertexAILLM, OpenAILLM
 from neo4j_graphrag.embeddings import SentenceTransformerEmbeddings
@@ -39,6 +40,20 @@ INDEX_NAME = os.getenv("NEO4J_VECTOR_INDEX", "chunk_embedding_idx")
 TOP_K = int(os.getenv("TOP_K", "5"))
 
 INGEST_TIMEOUT_SEC = int(os.getenv("INGEST_TIMEOUT_SEC", "1500"))
+
+RETRIEVAL_QUERY = """
+OPTIONAL MATCH (node)-[]-(nbr)
+WITH node, score,
+     collect(DISTINCT coalesce(nbr.name, nbr.title, nbr.path, nbr.text))[0..10] AS neigh
+RETURN
+  ("Chunk:\n" + coalesce(node.text, node.content, '') +
+   "\n\nGraph neighbors:\n" +
+   reduce(s = "", x IN neigh | s + "- " + toString(x) + "\n")
+  ) AS text,
+  score AS score
+"""
+
+
 
 
 class Neo4jGraphRAG:
@@ -121,8 +136,12 @@ class Neo4jGraphRAG:
             try:
                 # Prevent infinite hanging on Ollama
                 await asyncio.wait_for(
-                    self.kg_builder.run_async(text=text),
-                    timeout=INGEST_TIMEOUT_SEC
+                    self.kg_builder.run_async(
+                        file_path=str(path),
+                        text=text,
+                        document_metadata={"path": str(path)}
+                    ),
+                timeout=INGEST_TIMEOUT_SEC
                 )
 
                 # Mark OK only after successful ingest
@@ -152,65 +171,6 @@ class Neo4jGraphRAG:
                 print(f"[ERROR] {path}: {e}")
 
 
-class Neo4jVectorStore:
-    def __init__(self, driver, index_name):
-        self.driver = driver
-        self.index_name = index_name
-
-    def retrieve(self, query_vec, top_k=5):
-        cypher = """
-        CALL db.index.vector.queryNodes($index_name, $k, $qvec)
-        YIELD node, score
-        RETURN node.text AS text, score
-        ORDER BY score DESC
-        """
-        with self.driver.session() as session:
-            rows = session.run(
-                cypher,
-                index_name=self.index_name,
-                k=top_k,
-                qvec=query_vec,
-            )
-            return [(r["text"], r["score"]) for r in rows if r["text"]]
-
-class GraphRAGChat:
-    def __init__(self, vector_store, embedder, llm, top_k=5):
-        self.vector_store = vector_store
-        self.embedder = embedder
-        self.llm = llm
-        self.top_k = top_k
-
-    def ask(self, question: str):
-        qvec = self.embedder.encode(question).tolist()
-        results = self.vector_store.retrieve(qvec, self.top_k)
-
-        if not results:
-            print("AI: I don't have information about that in your notes.")
-            return
-
-        sources = [f"[s{i}] {txt}" for i, (txt, _) in enumerate(results, 1)]
-        context = "\n---\n".join(sources)
-
-        prompt = (
-            "You are an AI tutor.\n"
-            "CRITICAL RULES:\n"
-            "1) Answer ONLY using the Sources.\n"
-            "2) If the Sources do not contain the answer, say: "
-            "'I don't have information about that in your notes.'\n"
-            "3) Cite sources with [sX].\n\n"
-            f"Sources:\n{context}\n\n"
-            f"Question: {question}\n\n"
-            "Answer:"
-        )
-
-        print("AI: ", end="", flush=True)
-        for chunk in self.llm.stream(prompt):
-            print(chunk, end="", flush=True)
-
-        print("\n\nSources:")
-        for i, (txt, score) in enumerate(results, 1):
-            print(f"(score: {score:.4f}) [s{i}] {txt}".replace("\n", " "))
-
 
 async def main():
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
@@ -229,20 +189,57 @@ async def main():
     else:
         print("Skipping ingestion (DO_INGEST != 1)")
 
+    # 2) GRAPH-BASED RETRIEVAL + CHAT
+    embedder = SentenceTransformerEmbeddings(model=EMBEDDING_MODEL)
 
-    # 2) CHAT
-    embedder = SentenceTransformer(EMBEDDING_MODEL)
-    llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
+    retriever = VectorCypherRetriever(
+        driver=driver,
+        index_name=INDEX_NAME,
+        embedder=embedder,
+        retrieval_query=RETRIEVAL_QUERY,
+    )
 
-    store = Neo4jVectorStore(driver, INDEX_NAME)
-    chat = GraphRAGChat(store, embedder, llm, top_k=TOP_K)
+    llm = Neo4jOllamaLLM(model_name=CHAT_MODEL_NAME, model_params={"temperature": 0})
+
+    rag = GraphRAG(
+        retriever=retriever,
+        llm=llm,
+    )
 
     print("Entering GraphRAG chat. Type 'exit' to quit.")
     while True:
         q = input("\nYou: ").strip()
         if q.lower() == "exit":
             break
-        chat.ask(q)
+
+        resp = rag.search(
+            query_text=q,
+            retriever_config={"top_k": TOP_K},
+            return_context=True,
+            response_fallback="I don't have information about that in your notes."
+        )
+
+        print("\nAI:", resp.answer)
+
+        # show retrieved context
+        print("\n--- Retrieved context ---")
+
+        dump = resp.model_dump()
+        items = dump.get("retriever_result", {}).get("items", [])
+
+        for i, it in enumerate(items, 1):
+            content = it.get("content", "")
+
+            m = re.search(r"score=([0-9.]+)", content)
+            score = float(m.group(1)) if m else None
+
+            m2 = re.search(r'text="(.*)"\s+score=', content, re.DOTALL)
+            text = m2.group(1) if m2 else content
+
+            text = text.replace("\\n", "\n")
+
+            print(f"\n[c{i}] score={score}")
+            print(text[:1200])
 
     driver.close()
 
