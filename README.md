@@ -13,6 +13,12 @@ Copy the `.env.example` file to `.env` and adjust parameters as needed.
 cp .env.example .env
 ```
 
+You will need a running Neo4j instance, and of course, add your credentials to the `.env` file.
+```bash
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+```
+
 ## Usage
 
 Ingest documents (only needed once!):
