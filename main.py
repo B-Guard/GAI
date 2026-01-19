@@ -11,7 +11,9 @@ from evaluation.evaluate_rag import run_evaluation as run_rag_evaluation
 load_dotenv()
 
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "vector_store_faiss")
+FAISS_INDEX_PATH = os.getenv(
+    "FAISS_INDEX_PATH", os.path.join("data", "vector_store_faiss.pkl")
+)
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
@@ -44,7 +46,11 @@ async def main():
         choices=["ingest", "chat", "tests", "help"],
         help="Mode to run the script: ingest documents, chat, or perform automatic tests",
     )
-    parser.add_argument("--llm-model", required=True, help="Ollama LLM model to use")
+    parser.add_argument(
+        "--llm-model",
+        required=True,
+        help="Ollama LLM model to use",
+    )
     parser.add_argument(
         "--embedding-model", default=EMBEDDING_MODEL_NAME, help="Embedding model to use"
     )
@@ -107,8 +113,22 @@ async def main():
         chat.chat_loop()
     elif args.mode == "tests":
         print("Performing automatic tests...")
-        run_graphrag_evaluation(chat, args.embedding_model)
-        run_rag_evaluation(chat, args.embedding_model)
+        faiss = FaissVectorStore(
+            model_name=args.embedding_model, vector_store_path=args.faiss_path
+        )
+        faiss_chat = RAGChat(faiss, args.llm_model, args.top_k)
+        neo4j = Neo4jRetriever(
+            args.llm_model,
+            args.embedding_model,
+            uri=args.neo4j_uri,
+            user=args.neo4j_user,
+            password=args.neo4j_password,
+        )
+        neo4j_chat = RAGChat(neo4j, args.llm_model, args.top_k)
+
+        run_rag_evaluation(faiss_chat, args.embedding_model)
+        run_graphrag_evaluation(neo4j_chat, args.embedding_model)
+
     elif args.mode == "help":
         parser.print_help()
 
