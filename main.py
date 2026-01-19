@@ -42,7 +42,7 @@ async def main():
         choices=["ingest", "chat", "test", "help"],
         help="Mode to run the script: ingest documents, chat, or perform automatic tests",
     )
-    parser.add_argument("--llm-model", help="Ollama LLM model to use")
+    parser.add_argument("--llm-model", required=True, help="Ollama LLM model to use")
     parser.add_argument(
         "--embedding-model", default=EMBEDDING_MODEL_NAME, help="Embedding model to use"
     )
@@ -92,7 +92,7 @@ async def main():
             password=args.neo4j_password,
         )
 
-    chat = RAGChat(retriever, args.top_k)
+    chat = RAGChat(retriever, args.llm_model, args.top_k)
 
     if args.mode == "ingest":
         if not args.path:

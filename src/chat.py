@@ -1,4 +1,5 @@
 import os
+from typing import Optional, List
 from langchain_ollama import OllamaLLM
 
 from src.retriever import VectorStore
@@ -9,12 +10,19 @@ KEYWORD_WEIGHT = float(os.getenv("KEYWORD_WEIGHT"))
 
 
 class RAGChat:
-    def __init__(self, vector_store: VectorStore, top_k):
+    def __init__(
+        self,
+        vector_store: VectorStore,
+        model_name: str = CHAT_MODEL_NAME,
+        top_k: int = 5,
+    ):
         self.vector_store = vector_store
         self.top_k = top_k
-        self.llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
+        self.llm = OllamaLLM(model=model_name, temperature=0)
 
-    def _process_question(self, question: str, stream: bool = True):
+    def _process_question(
+        self, question: str, stream: bool = True
+    ) -> Optional[tuple[str, List[str]]]:
         results = self.vector_store.retrieve(question, self.top_k)
         if len(results) == 0:
             print("It seems I am not capable of answering that question.")
@@ -26,13 +34,12 @@ class RAGChat:
             "When you make a factual statement supported by a source, append the corresponding [sX] tag at the end of the sentence.\n"
             f"Sources:\n{context}\n\nQuestion: {question}\nAnswer:"
         )
-        print("AI: ", end="", flush=True)
-        if stream:
-            for chunk in self.llm.stream(prompt):
-                print(chunk, end="", flush=True)
-        else:
+        if not stream:
             answer = self.llm.invoke(prompt)
-            print(answer, end="", flush=True)
+            return answer, sources
+        print("AI: ", end="", flush=True)
+        for chunk in self.llm.stream(prompt):
+            print(chunk, end="", flush=True)
         print()  # Newline after completion
         print("\nSources:")
         for i, (src, (_, score)) in enumerate(zip(sources, results), 1):
@@ -49,5 +56,3 @@ class RAGChat:
                 print("Exiting chat mode.")
                 break
             self._process_question(question)
-
-    
