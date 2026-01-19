@@ -28,8 +28,10 @@ When running the default Neo4j retriever, you can also overwrite the Neo4j conne
 
 Ingest documents (only needed once!):
 ```bash
-python main.py ingest --path <path to text files>
+python main.py ingest --path "<path pattern to text files>"
 ```
+Don't forget the quotes around the path pattern! To ingest the provided sample files, the recommended pattern is `"data/texts/*.txt"`.
+
 The ingestion of documents if using the Neo4j retriever will take quite some time. This is why we provide a dump of a pre-ingested database inside the `dump` folder. You can restore it in your Neo4j instance to skip the ingestion step.
 
 
