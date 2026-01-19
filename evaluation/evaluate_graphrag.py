@@ -1,16 +1,11 @@
 import os
 import json
+from tqdm import tqdm
 from dotenv import load_dotenv
-import sys
 from langchain_ollama import OllamaLLM
-from neo4j import GraphDatabase
-from sentence_transformers import SentenceTransformer
 
-# Add test and evaluation directories to path
-sys.path.append('test')
-sys.path.append('evaluation')
-from graphrag_w_neo4j import Neo4jVectorStore
-from test_questions import get_test_dataset, load_ground_truth_from_file
+from src.chat import RAGChat
+from evaluation.test_questions import get_test_dataset, load_ground_truth_from_file
 
 load_dotenv()
 
@@ -19,8 +14,7 @@ NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 INDEX_NAME = os.getenv("NEO4J_VECTOR_INDEX", "chunk_embedding_idx")
 
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-CHAT_MODEL_NAME = os.getenv("CHAT_MODEL_NAME", "llama3.2:latest")
+EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", "llama3.2:latest")
 
 # Ensure results directory exists
 RESULTS_DIR = os.path.join("evaluation", "results")
@@ -134,7 +128,7 @@ EXPLANATION: [brief explanation]"""
         score_line = [line for line in response.split('\n') if 'SCORE:' in line][0]
         score = float(score_line.split(':')[1].strip())
         score = min(10, max(0, score)) / 10
-    except:
+    except Exception:
         score = 0.5
 
     return score, response
@@ -185,47 +179,47 @@ def generate_graphrag_responses(vector_store, embedder, llm, questions, top_k=5)
     return answers, contexts
 
 
-def run_evaluation(top_k=5):
+def run_evaluation(chat_interface: RAGChat, embedding_model_name):
     """Run Ollama-based evaluation on GraphRAG system."""
     print("=" * 80)
     print("Neo4j GraphRAG Evaluation (graphrag_w_neo4j.py)")
     print("=" * 80)
 
     # Initialize Ollama
-    print(f"\n[0/6] Initializing Ollama model ({CHAT_MODEL_NAME})...")
+    print(f"\n[0/6] Initializing Ollama model ({EVAL_MODEL_NAME})...")
     try:
-        eval_llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
+        eval_llm = OllamaLLM(model=EVAL_MODEL_NAME, temperature=0)
         eval_llm.invoke("Hello")
         print("✓ Ollama model ready")
     except Exception as e:
         print(f"✗ Error: Could not connect to Ollama: {e}")
         return
 
-    # Connect to Neo4j
-    print("\n[1/6] Connecting to Neo4j...")
-    try:
-        driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-        # Test connection
-        with driver.session() as session:
-            result = session.run("RETURN 1 AS test")
-            record = result.single()
-            if record["test"] != 1:
-                raise Exception("Connection test failed")
-        print("✓ Connected to Neo4j")
-    except Exception as e:
-        print(f"✗ Error: Could not connect to Neo4j: {e}")
-        print("\nMake sure:")
-        print("  1. Neo4j is running (Desktop app or Docker)")
-        print("  2. NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD are set in .env")
-        print("  3. Data has been ingested (DO_INGEST=1)")
-        return
+    # # Connect to Neo4j
+    # print("\n[1/6] Connecting to Neo4j...")
+    # try:
+    #     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    #     # Test connection
+    #     with driver.session() as session:
+    #         result = session.run("RETURN 1 AS test")
+    #         record = result.single()
+    #         if record["test"] != 1:
+    #             raise Exception("Connection test failed")
+    #     print("✓ Connected to Neo4j")
+    # except Exception as e:
+    #     print(f"✗ Error: Could not connect to Neo4j: {e}")
+    #     print("\nMake sure:")
+    #     print("  1. Neo4j is running (Desktop app or Docker)")
+    #     print("  2. NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD are set in .env")
+    #     print("  3. Data has been ingested (DO_INGEST=1)")
+    #     return
 
-    # Initialize components
-    print("\n[2/6] Initializing GraphRAG components...")
-    embedder = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    vector_store = Neo4jVectorStore(driver, INDEX_NAME)
-    llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
-    print("✓ Components ready")
+    # # Initialize components
+    # print("\n[2/6] Initializing GraphRAG components...")
+    # embedder = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    # vector_store = Neo4jVectorStore(driver, INDEX_NAME)
+    # llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
+    # print("✓ Components ready")
 
     # Create test dataset
     print("\n[3/6] Creating test dataset...")
@@ -233,8 +227,12 @@ def run_evaluation(top_k=5):
     print(f"✓ Created {len(test_data['question'])} test cases")
 
     # Generate GraphRAG responses
-    print(f"\n[4/6] Generating GraphRAG responses (top_k={top_k})...")
-    answers, contexts = generate_graphrag_responses(vector_store, embedder, llm, test_data["question"], top_k)
+    print(f"\n[4/6] Generating GraphRAG responses (top_k={chat_interface.top_k})...")
+    answers, contexts = [], []
+    for question in tqdm(test_data["question"]):
+        answer, context_list = chat_interface._process_question(question, stream=False)
+        answers.append(answer)
+        contexts.append(context_list)
     print(f"✓ Generated {len(answers)} answers")
 
     # Run evaluations
@@ -250,9 +248,9 @@ def run_evaluation(top_k=5):
 
     detailed_results = []
 
-    for i, (question, answer, context_list, ground_truth) in enumerate(
+    for i, (question, answer, context_list, ground_truth) in tqdm(enumerate(
             zip(test_data["question"], answers, contexts, test_data["ground_truth"]), 1
-    ):
+    )):
         print(f"\n--- Evaluating Question {i}/{len(test_data['question'])} ---")
         print(f"Q: {question[:80]}...")
 
@@ -323,15 +321,15 @@ def run_evaluation(top_k=5):
     print("=" * 80)
 
     # Save results
-    print(f"\nSaving results...")
+    print("\nSaving results...")
     final_results = {
         "model": "Neo4j GraphRAG",
         "summary": avg_scores,
         "overall_average": float(overall_avg),
         "config": {
-            "top_k": top_k,
-            "embedding_model": EMBEDDING_MODEL_NAME,
-            "chat_model": CHAT_MODEL_NAME,
+            "top_k": chat_interface.top_k,
+            "embedding_model": embedding_model_name,
+            "chat_model": chat_interface.llm.model,
             "neo4j_uri": NEO4J_URI,
             "index_name": INDEX_NAME,
         },
@@ -343,8 +341,8 @@ def run_evaluation(top_k=5):
 
     print(f"✓ Results saved to: {TEST_RESULTS_PATH}")
 
-    # Close Neo4j connection
-    driver.close()
+    # # Close Neo4j connection
+    # driver.close()
 
     return final_results
 
@@ -356,4 +354,5 @@ if __name__ == "__main__":
     parser.add_argument("--top_k", type=int, default=5, help="Number of contexts to retrieve")
 
     args = parser.parse_args()
-    run_evaluation(top_k=args.top_k)
+    print("Will not run!")
+    # run_evaluation(top_k=args.top_k) # Outdated

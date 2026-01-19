@@ -5,6 +5,8 @@ import subprocess
 from dotenv import load_dotenv
 from src.chat import RAGChat
 from src.retriever import FaissVectorStore, Neo4jRetriever
+from evaluation.evaluate_graphrag import run_evaluation as run_graphrag_evaluation
+from evaluation.evaluate_rag import run_evaluation as run_rag_evaluation
 
 load_dotenv()
 
@@ -39,7 +41,7 @@ async def main():
     )
     parser.add_argument(
         "mode",
-        choices=["ingest", "chat", "test", "help"],
+        choices=["ingest", "chat", "tests", "help"],
         help="Mode to run the script: ingest documents, chat, or perform automatic tests",
     )
     parser.add_argument("--llm-model", required=True, help="Ollama LLM model to use")
@@ -103,9 +105,10 @@ async def main():
     elif args.mode == "chat":
         print("Starting chat...")
         chat.chat_loop()
-    elif args.mode == "test":
+    elif args.mode == "tests":
         print("Performing automatic tests...")
-        # TODO test logic
+        run_graphrag_evaluation(chat, args.embedding_model)
+        run_rag_evaluation(chat, args.embedding_model)
     elif args.mode == "help":
         parser.print_help()
 

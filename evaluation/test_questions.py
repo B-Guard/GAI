@@ -6,7 +6,7 @@ This file contains the mapping between test questions and their corresponding gr
 import os
 
 # Base directory for data files
-DATA_DIR = "data/texts"
+DATA_DIR = os.path.join("data", "texts")
 
 # Test questions mapped to their ground truth source files
 TEST_QUESTIONS = {

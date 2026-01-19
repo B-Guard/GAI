@@ -1,20 +1,17 @@
 import os
 import json
+from tqdm import tqdm
 from dotenv import load_dotenv
-import sys
 from langchain_ollama import OllamaLLM
 
-# Add test and evaluation directories to path
-sys.path.append('test')
-sys.path.append('evaluation')
-from rag import FaissVectorStore, RAGChat
-from test_questions import get_test_dataset, load_ground_truth_from_file
+from src.chat import RAGChat
+from evaluation.test_questions import get_test_dataset, load_ground_truth_from_file
 
 load_dotenv()
 
 VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss.pkl")
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-CHAT_MODEL_NAME = os.getenv("CHAT_MODEL_NAME", "llama3.2:latest")
+EVAL_MODEL_NAME = os.getenv("EVAL_MODEL_NAME", "llama3.2:latest")
 
 # Ensure results directory exists
 RESULTS_DIR = os.path.join("evaluation", "results")
@@ -128,7 +125,7 @@ EXPLANATION: [brief explanation]"""
         score_line = [line for line in response.split('\n') if 'SCORE:' in line][0]
         score = float(score_line.split(':')[1].strip())
         score = min(10, max(0, score)) / 10
-    except:
+    except Exception:
         score = 0.5
 
     return score, response
@@ -173,30 +170,30 @@ def generate_rag_responses(vector_store, questions, top_k=5):
     return answers, contexts
 
 
-def run_evaluation(top_k=5):
+def run_evaluation(chat_interface: RAGChat, embedding_model_name: str):
     """Run Ollama-based evaluation on FAISS RAG system."""
     print("=" * 80)
     print("FAISS RAG Evaluation (rag.py)")
     print("=" * 80)
 
     # Initialize Ollama
-    print(f"\n[0/6] Initializing Ollama model ({CHAT_MODEL_NAME})...")
+    print(f"\n[0/6] Initializing Ollama model ({EVAL_MODEL_NAME})...")
     try:
-        eval_llm = OllamaLLM(model=CHAT_MODEL_NAME, temperature=0)
+        eval_llm = OllamaLLM(model=EVAL_MODEL_NAME, temperature=0)
         eval_llm.invoke("Hello")
         print("✓ Ollama model ready")
     except Exception as e:
         print(f"✗ Error: Could not connect to Ollama: {e}")
         return
 
-    # Load vector store
-    print("\n[1/6] Loading FAISS vector store...")
-    store = FaissVectorStore(model_name=EMBEDDING_MODEL_NAME, vector_store_path=VECTOR_STORE_PATH)
-    if not store.texts:
-        print(f"✗ Error: Vector store is empty or not found at {VECTOR_STORE_PATH}")
-        print("Please run ingestion first: python test/rag.py ingest 'data/texts/*.txt'")
-        return
-    print(f"✓ Loaded vector store with {len(store.texts)} chunks")
+    # # Load vector store
+    # print("\n[1/6] Loading FAISS vector store...")
+    # store = FaissVectorStore(model_name=EMBEDDING_MODEL_NAME, vector_store_path=VECTOR_STORE_PATH)
+    # if not store.texts:
+    #     print(f"✗ Error: Vector store is empty or not found at {VECTOR_STORE_PATH}")
+    #     print("Please run ingestion first: python test/rag.py ingest 'data/texts/*.txt'")
+    #     return
+    # print(f"✓ Loaded vector store with {len(store.texts)} chunks")
 
     # Create test dataset
     print("\n[2/6] Creating test dataset...")
@@ -204,8 +201,12 @@ def run_evaluation(top_k=5):
     print(f"✓ Created {len(test_data['question'])} test cases")
 
     # Generate RAG responses
-    print(f"\n[3/6] Generating RAG responses (top_k={top_k})...")
-    answers, contexts = generate_rag_responses(store, test_data["question"], top_k)
+    print(f"\n[3/6] Generating RAG responses (top_k={chat_interface.top_k})...")
+    answers, contexts = [], []
+    for question in tqdm(test_data["question"]):
+        answer, context_list = chat_interface._process_question(question, stream=False)
+        answers.append(answer)
+        contexts.append(context_list)
     print(f"✓ Generated {len(answers)} answers")
 
     # Run evaluations
@@ -221,9 +222,9 @@ def run_evaluation(top_k=5):
 
     detailed_results = []
 
-    for i, (question, answer, context_list, ground_truth) in enumerate(
+    for i, (question, answer, context_list, ground_truth) in tqdm(enumerate(
             zip(test_data["question"], answers, contexts, test_data["ground_truth"]), 1
-    ):
+    )):
         print(f"\n--- Evaluating Question {i}/{len(test_data['question'])} ---")
         print(f"Q: {question[:80]}...")
 
@@ -294,15 +295,15 @@ def run_evaluation(top_k=5):
     print("=" * 80)
 
     # Save results
-    print(f"\n[6/6] Saving results...")
+    print("\n[6/6] Saving results...")
     final_results = {
         "model": "FAISS RAG",
         "summary": avg_scores,
         "overall_average": float(overall_avg),
         "config": {
-            "top_k": top_k,
-            "embedding_model": EMBEDDING_MODEL_NAME,
-            "chat_model": CHAT_MODEL_NAME,
+            "top_k": chat_interface.top_k,
+            "embedding_model": embedding_model_name,
+            "chat_model": chat_interface.llm.model,
             "vector_store_path": VECTOR_STORE_PATH,
         },
         "test_cases": detailed_results,
@@ -323,4 +324,5 @@ if __name__ == "__main__":
     parser.add_argument("--top_k", type=int, default=5, help="Number of contexts to retrieve")
 
     args = parser.parse_args()
-    run_evaluation(top_k=args.top_k)
+    print("Will not run!")
+    # run_evaluation(top_k=args.top_k) # Outdated
