@@ -71,8 +71,11 @@ class FaissVectorStore(VectorStore):
                 print(f"Loaded existing vector store from {self.vector_store_path}")
             except Exception as e:
                 print(f"Warning: Could not load vector store: {e}")
+                raise e
+        else:
+            print("Starting a fresh FAISS vector store.")
 
-    def ingest(self, file_pattern: str):
+    async def ingest(self, file_pattern: str):
         files = glob.glob(file_pattern, recursive=True)
         new_texts = []
         new_embeddings = []
@@ -119,8 +122,11 @@ class FaissVectorStore(VectorStore):
         print(
             f"Ingested {len(new_texts)} chunks from {len(files)} files into the FAISS vector store."
         )
+        self.save(self.vector_store_path)
 
     def retrieve(self, query: str, top_k: int = 5) -> list[tuple[str, float]]:
+        if self.index is None:
+            raise ValueError("FAISS index is empty. Ingest data before retrieval!")
         # Encode and normalize the query
         q_emb = self.model.encode([query], convert_to_numpy=True).astype("float32")
         faiss.normalize_L2(q_emb)
