@@ -17,12 +17,15 @@ from neo4j import GraphDatabase
 from neo4j_graphrag.llm import OllamaLLM
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.embeddings import SentenceTransformerEmbeddings
+from neo4j_graphrag.experimental.components.schema import GraphSchema
 from neo4j_graphrag.experimental.pipeline.kg_builder import SimpleKGPipeline
 from neo4j_graphrag.experimental.components.text_splitters.langchain import (
     LangChainTextSplitterAdapter,
 )
 import faiss
 from dotenv import load_dotenv
+
+from src.schemas import transformers_and_llms_schema
 
 load_dotenv()
 
@@ -203,8 +206,8 @@ class Neo4jRetriever(VectorStore):
         except Exception:
             return False
 
-    def _get_schema(self) -> str:
-        return "FREE"
+    def _get_schema(self) -> GraphSchema:
+        return transformers_and_llms_schema()
 
     def _doc_hash(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()

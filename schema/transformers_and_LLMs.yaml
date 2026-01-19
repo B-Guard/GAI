@@ -1,0 +1,205 @@
+# Schema for neo4j_graphrag
+
+node_types:
+  - label: Concept
+    properties:
+      - name: name
+        type: STRING
+      - name: type
+        type: STRING        # e.g. architecture, algorithmic_step, objective, mathematical_object, representation
+      - name: description
+        type: STRING
+      - name: aliases
+        type: LIST
+      - name: level
+        type: STRING        # INTro, INTermediate, advanced
+
+  - label: ModelFamily
+    properties:
+      - name: name
+        type: STRING
+      - name: modality
+        type: STRING        # vision, text, text+image, video
+      - name: task
+        type: STRING        # classification, next-token, text-to-image, etc.
+      - name: notes
+        type: STRING
+
+  - label: Algorithm
+    properties:
+      - name: name
+        type: STRING
+      - name: category
+        type: STRING        # optimization, sampling, training_objective, control, etc.
+      - name: pseudocode_ref
+        type: STRING
+      - name: INTuition
+        type: STRING
+
+  - label: MathematicalObject
+    properties:
+      - name: name
+        type: STRING
+      - name: kind
+        type: STRING        # function, operator, distribution, space, equation
+      - name: symbol
+        type: STRING
+
+  - label: ExampleScenario
+    properties:
+      - name: name
+        type: STRING
+      - name: modality
+        type: STRING        # image, video, text
+      - name: task
+        type: STRING
+      - name: description
+        type: STRING
+
+  - label: Document
+    properties:
+      - name: doc_id
+        type: STRING
+      - name: title
+        type: STRING
+      - name: source
+        type: STRING        # e.g. 3Blue1Brown, DeepSeek explainer
+      - name: topic
+        type: STRING        # neural_networks, backpropagation, transformers, diffusion, RL_for_LLMs, etc.
+
+  - label: Section
+    properties:
+      - name: section_id
+        type: STRING
+      - name: heading
+        type: STRING
+      - name: order
+        type: INTEGER
+
+  - label: Chunk
+    properties:
+      - name: chunk_id
+        type: STRING
+      - name: text
+        type: STRING
+      - name: order
+        type: INTEGER
+      - name: embedding_id
+        type: STRING        # or vector_store_key
+
+  - label: Person
+    properties:
+      - name: name
+        type: STRING
+      - name: role
+        type: STRING        # researcher, author, etc.
+
+relationship_types:
+  # Structural
+  - label: CONTAINS
+    # from: Document
+    # to: Section
+
+  - label: CONTAINS_SECTION_CHUNK
+    # from: Section
+    # to: Chunk
+
+  - label: MENTIONS
+    # from: Chunk
+    # to: Concept
+
+  - label: EXPLAINS
+    # from: Chunk
+    # to: Concept
+
+  # Concept structure
+  - label: HAS_SUBCONCEPT
+    # from: Concept
+    # to: Concept
+
+  - label: PART_OF_MODEL
+    # from: Concept
+    # to: ModelFamily
+
+  - label: USES_MATH_OBJECT
+    # from: Algorithm
+    # to: MathematicalObject
+
+  - label: MODEL_USES_MATH_OBJECT
+    # from: ModelFamily
+    # to: MathematicalObject
+
+  # Dependencies
+  - label: DEPENDS_ON
+    # from: Algorithm
+    # to: Concept
+
+  - label: DEPENDS_ON_MATH
+    # from: Algorithm
+    # to: MathematicalObject
+
+  - label: GENERALIZES
+    # from: Concept
+    # to: Concept
+
+  - label: SPECIALIZES
+    # from: Concept
+    # to: Concept
+
+  - label: ALTERNATIVE_TO
+    # from: Concept
+    # to: Concept
+
+  # Semantic relations
+  - label: SIMILAR_TO
+    # from: Concept
+    # to: Concept
+
+  - label: CONTRASTS_WITH
+    # from: Concept
+    # to: Concept
+
+  - label: CAUSES
+    # from: Concept
+    # to: Concept
+
+  - label: AFFECTS
+    # from: Concept
+    # to: Concept
+
+  # Didactic / narrative
+  - label: PRECEDES_IN_LEARNING
+    # from: Concept
+    # to: Concept
+
+  - label: INTRODUCES
+    # from: Document
+    # to: Concept
+
+  - label: ALSO_DESCRIBED_IN
+    # from: Concept
+    # to: Document
+
+  # Examples
+  - label: ILLUSTRATED_BY
+    # from: Concept
+    # to: ExampleScenario
+
+  - label: EXAMPLE_IN_DOCUMENT
+    # from: ExampleScenario
+    # to: Document
+
+  # Provenance
+  - label: WRITTEN_BY
+    # from: Document
+    # to: Person
+
+  - label: CITES_PERSON
+    # from: Document
+    # to: Person
+
+additional_node_types: false
+
+additional_relationship_types: false
+
+additional_patterns: false
