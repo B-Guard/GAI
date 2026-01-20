@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import re
 import asyncio
 from dotenv import load_dotenv
 from src.chat import RAGChat
@@ -21,6 +22,41 @@ st.set_page_config(
     page_icon="🤖",
     layout="wide"
 )
+
+# Custom CSS for clickable source citations
+st.markdown("""
+<style>
+.source-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    margin: 0 2px;
+    background-color: #2e7d32;
+    color: white;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+.source-badge:hover {
+    background-color: #1b5e20;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+def format_answer_with_citations(answer: str, message_index: int = 0) -> str:
+    """Make [sX] or [X] tags into clickable"""
+
+    def replace_citation(match):
+        source_num = match.group(1)
+        return f'<a href="#msg{message_index}-source-{source_num}" class="source-badge">[{source_num}]</a>'
+
+    # Match source notation patterns
+    formatted = re.sub(r'\[s?(\d+)\]', replace_citation, answer)
+    return formatted
+
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -130,12 +166,20 @@ if st.session_state.chat_instance is None:
     st.info("← Please initialize the chat system using the sidebar.")
 else:
     # Display chat messages
-    for message in st.session_state.messages:
+    for msg_idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Citations as clickable badges for assistant messages
+            if message["role"] == "assistant":
+                formatted_content = format_answer_with_citations(message["content"], msg_idx)
+                st.markdown(formatted_content, unsafe_allow_html=True)
+            else:
+                st.markdown(message["content"])
+
             if "sources" in message and message["sources"]:
                 with st.expander("View Sources"):
                     for i, source in enumerate(message["sources"], 1):
+                        # Add unique anchor for this message's sources
+                        st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
                         st.markdown(f"**Source {i}:**")
                         st.text(source[:500] + "..." if len(source) > 500 else source)
                         st.divider()
@@ -158,12 +202,19 @@ else:
                     )
 
                     if answer:
-                        st.markdown(answer)
+                        # Get message index for unique anchors
+                        msg_idx = len(st.session_state.messages)
+
+                        # Format and display with clickable citations
+                        formatted_answer = format_answer_with_citations(answer, msg_idx)
+                        st.markdown(formatted_answer, unsafe_allow_html=True)
 
                         # Show sources in expander
                         if sources:
                             with st.expander("View Sources"):
                                 for i, source in enumerate(sources, 1):
+                                    # Add unique anchor for this message's sources
+                                    st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
                                     st.markdown(f"**Source {i}:**")
                                     st.text(source[:500] + "..." if len(source) > 500 else source)
                                     st.divider()
