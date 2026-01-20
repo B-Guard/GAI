@@ -100,6 +100,7 @@ class RAGChat:
             if question.strip().lower() == "exit":
                 print("Exiting chat mode.")
                 break
+            print("SALVIA: ", end="", flush=True)
             for chunk, sources in self.stream_answer(question):
                 if chunk is not None:
                     print(chunk, end="", flush=True)
