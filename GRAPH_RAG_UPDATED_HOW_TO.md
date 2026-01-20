@@ -1,4 +1,4 @@
-```markdown
+
 # GraphRAG with Neo4j (Updated) — Windows PowerShell Guide
 
 This guide documents a **fully working setup** for running:
