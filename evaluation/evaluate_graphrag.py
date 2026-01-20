@@ -230,7 +230,7 @@ def run_evaluation(chat_interface: RAGChat, embedding_model_name):
     print(f"\n[4/6] Generating GraphRAG responses (top_k={chat_interface.top_k})...")
     answers, contexts = [], []
     for question in tqdm(test_data["question"]):
-        answer, context_list = chat_interface._process_question(question, stream=False)
+        answer, context_list = chat_interface.answer(question, stream=False)
         answers.append(answer)
         contexts.append(context_list)
     print(f"✓ Generated {len(answers)} answers")
