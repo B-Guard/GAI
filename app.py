@@ -94,7 +94,7 @@ with st.sidebar:
             file_size = os.path.getsize(FAISS_INDEX_PATH) / 1024  # KB
             st.success(f"FAISS index found ({file_size:.1f} KB)")
         else:
-            st.warning(f"FAISS index not found")
+            st.warning("FAISS index not found")
             st.markdown("Run ingestion first:")
             st.code("""python main.py ingest \\
   --llm-model llama3.2:latest \\
@@ -108,7 +108,7 @@ with st.sidebar:
                 if retriever_type == "faiss":
                     # Check if file exists before initializing
                     if not os.path.exists(FAISS_INDEX_PATH):
-                        st.error(f"FAISS index not found. Please run ingestion first.")
+                        st.error("FAISS index not found. Please run ingestion first.")
                     else:
                         retriever = FaissVectorStore(
                             model_name=EMBEDDING_MODEL_NAME,
@@ -120,7 +120,7 @@ with st.sidebar:
                             model_name=llm_model,
                             top_k=top_k
                         )
-                        st.success(f"Chat initialized with FAISS retriever!")
+                        st.success("Chat initialized with FAISS retriever!")
                 else:
                     retriever = Neo4jRetriever(
                         llm_model_name=llm_model,
@@ -135,7 +135,7 @@ with st.sidebar:
                         model_name=llm_model,
                         top_k=top_k
                     )
-                    st.success(f"Chat initialized with Neo4j retriever!")
+                    st.success("Chat initialized with Neo4j retriever!")
 
             except Exception as e:
                 st.error(f"Error initializing chat: {str(e)}")
@@ -181,7 +181,7 @@ else:
                         # Add unique anchor for this message's sources
                         st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
                         st.markdown(f"**Source {i}:**")
-                        st.text(source[:500] + "..." if len(source) > 500 else source)
+                        st.text(source[5:505].strip() + "..." if len(source) > 500 else source[5:].strip())
                         st.divider()
 
     # Chat input
@@ -191,47 +191,45 @@ else:
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Get AI response
+        # Get AI response (streaming)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Get response from chat instance
-                    answer, sources = st.session_state.chat_instance._process_question(
-                        prompt,
-                        stream=False
-                    )
-
-                    if answer:
-                        # Get message index for unique anchors
-                        msg_idx = len(st.session_state.messages)
-
-                        # Format and display with clickable citations
-                        formatted_answer = format_answer_with_citations(answer, msg_idx)
-                        st.markdown(formatted_answer, unsafe_allow_html=True)
-
-                        # Show sources in expander
-                        if sources:
-                            with st.expander("View Sources"):
-                                for i, source in enumerate(sources, 1):
-                                    # Add unique anchor for this message's sources
-                                    st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
-                                    st.markdown(f"**Source {i}:**")
-                                    st.text(source[:500] + "..." if len(source) > 500 else source)
-                                    st.divider()
-
-                        # Add to messages
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": answer,
-                            "sources": sources
-                        })
-                    else:
+                    response_chunks = []
+                    sources = []
+                    response_placeholder = st.empty()
+                    # Stream the answer
+                    for chunk, srcs in st.session_state.chat_instance.stream_answer(prompt):
+                        if chunk is not None:
+                            response_chunks.append(chunk)
+                            # Get message index for unique anchors (use current length + 1 for in-progress message)
+                            msg_idx = len(st.session_state.messages)
+                            formatted_answer = format_answer_with_citations(''.join(response_chunks), msg_idx)
+                            response_placeholder.markdown(formatted_answer, unsafe_allow_html=True)
+                        else:
+                            if srcs:
+                                sources = srcs
+                            break
+                    # Show sources in expander
+                    if sources:
+                        with st.expander("View Sources"):
+                            for i, source in enumerate(sources, 1):
+                                # Add unique anchor for this message's sources
+                                st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
+                                st.markdown(f"**Source {i}:**")
+                                st.text(source[:500] + "..." if len(source) > 500 else source)
+                                st.divider()
+                    # Add to messages
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": ''.join(response_chunks),
+                        "sources": sources
+                    })
+                    if not response_chunks:
                         st.warning("Sorry, I couldn't find relevant information to answer that question.")
-
                 except Exception as e:
                     st.error(f"Error generating response: {str(e)}")
                     import traceback
-
                     with st.expander("Show full error"):
                         st.code(traceback.format_exc())
 
