@@ -75,3 +75,7 @@ Basic RAG setup is done. Ingest files by running `python rag.py ingest "<pattern
 
 
 ### UI
+Run the Streamlit UI
+```bash
+streamlit run app.py
+```

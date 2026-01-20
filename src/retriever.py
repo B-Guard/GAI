@@ -42,8 +42,8 @@ WITH node, score, r, nbr,
         nbr.name,
         nbr.title,
         nbr.path,
-        CASE WHEN exists(nbr.text) THEN left(nbr.text, 160) END,
-        CASE WHEN exists(nbr.content) THEN left(nbr.content, 160) END
+        CASE WHEN nbr.text IS NOT NULL THEN left(nbr.text, 160) END,
+        CASE WHEN nbr.content IS NOT NULL THEN left(nbr.content, 160) END
      ) AS surface
 WHERE surface IS NOT NULL AND trim(surface) <> ""
 WITH node, score,
