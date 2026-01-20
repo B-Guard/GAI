@@ -5,4 +5,10 @@ __pycache__/
 .env
 
 *.pkl
-*.json
+#*.json
+
+neo4jdata/
+
+neo4jlogs/
+
+neo4jplugins/*.jar

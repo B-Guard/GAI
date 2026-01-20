@@ -42,16 +42,9 @@ TOP_K = int(os.getenv("TOP_K", "5"))
 INGEST_TIMEOUT_SEC = int(os.getenv("INGEST_TIMEOUT_SEC", "1500"))
 
 RETRIEVAL_QUERY = """
-OPTIONAL MATCH (node)-[]-(nbr)
-WITH node, score,
-     collect(DISTINCT coalesce(nbr.name, nbr.title, nbr.path, nbr.text))[0..10] AS neigh
-RETURN
-  ("Chunk:\n" + coalesce(node.text, node.content, '') +
-   "\n\nGraph neighbors:\n" +
-   reduce(s = "", x IN neigh | s + "- " + toString(x) + "\n")
-  ) AS text,
-  score AS score
+RETURN coalesce(node.text, '') AS text, score AS score
 """
+
 
 
 
@@ -60,36 +53,78 @@ class Neo4jGraphRAG:
     def __init__(self, llm_model_name: str, embedding_model_name: str, driver):
         self.driver = driver
         assert self._test_connection(), "Could not connect to Neo4j database."
-        self.llm = Neo4jOllamaLLM(model_name=llm_model_name)
+        self.llm = Neo4jOllamaLLM(
+            model_name=llm_model_name,
+            model_params={"options": {"temperature": 0}, "format": "json"}
+        )
+
         # self.llm = VertexAILLM()
         self.embedder = SentenceTransformerEmbeddings(model=embedding_model_name)
+        STRICT_JSON_PROMPT = """
+        You are an entity & relationship extraction system.
+
+        Extract entities and relationships from the TEXT using the SCHEMA as guidance.
+        Return ONLY a valid JSON object. No markdown. No explanations.
+
+        Required JSON format (exact keys):
+        {{
+          "nodes": [
+            {{"id": "string", "label": "string", "properties": {{"name": "string"}}}}
+          ],
+          "relationships": [
+            {{"type": "string", "start_node_id": "string", "end_node_id": "string", "properties": {{}}}}
+          ]
+        }}
+
+        Rules:
+        - Every node must have a non-empty properties.name.
+        - Use one of the schema node labels for label.
+        - Use one of the schema relationship labels for type.
+        - If nothing relevant is found, return {{"nodes": [], "relationships": []}}.
+
+        SCHEMA:
+        {schema}
+
+        TEXT:
+        {text}
+        """
+
+        import logging
+        logging.basicConfig(level=logging.INFO)
+
         self.kg_builder = SimpleKGPipeline(
             llm=self.llm,
             driver=self.driver,
             embedder=self.embedder,
+            neo4j_database="neo4j",
             schema=self._get_schema(),
             text_splitter=LangChainTextSplitterAdapter(
-                text_splitter=RecursiveCharacterTextSplitter(
-                    chunk_size=2000, chunk_overlap=150
-                )
+                text_splitter=RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=150)
             ),
             from_pdf=False,
+            prompt_template=STRICT_JSON_PROMPT,
+            on_error="RAISE",
+            perform_entity_resolution=False,  # speed/debug first; turn on later
         )
 
     def _test_connection(self):
         """
         Tests the connection to the Neo4j database.
         """
+        import traceback
         try:
             with self.driver.session() as session:
                 result = session.run("RETURN 1 AS test")
                 record = result.single()
                 return record["test"] == 1
-        except Exception:
-            return False
 
-    def _get_schema(self) -> str:
-        return "FREE"
+        except Exception as e:
+                traceback.print_exc()
+
+    def _get_schema(self):
+        import json
+        with open("schema_gai.json", "r", encoding="utf-8") as f:
+            return json.load(f)
 
     def _doc_hash(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -186,6 +221,16 @@ async def main():
     if DO_INGEST:
         await rag.ingest_documents(os.path.join("data", "texts", "*.txt"))
         print("Ingestion finished")
+        with driver.session() as s:
+            print("[CHECK] docs =", s.run("MATCH (d:Document) RETURN count(d) AS n").single()["n"])
+            print("[CHECK] chunks =", s.run("MATCH (c:Chunk) RETURN count(c) AS n").single()["n"])
+            print("[CHECK] embedded =",
+                  s.run("MATCH (c:Chunk) WHERE c.embedding IS NOT NULL RETURN count(c) AS n").single()["n"])
+            print("[CHECK] vector indexes =", s.run(
+                "SHOW VECTOR INDEXES YIELD name, state, populationPercent RETURN collect({name:name,state:state,pop:populationPercent}) AS x").single()[
+                "x"])
+
+
     else:
         print("Skipping ingestion (DO_INGEST != 1)")
 
@@ -199,7 +244,10 @@ async def main():
         retrieval_query=RETRIEVAL_QUERY,
     )
 
-    llm = Neo4jOllamaLLM(model_name=CHAT_MODEL_NAME, model_params={"temperature": 0})
+    llm = Neo4jOllamaLLM(
+        model_name=CHAT_MODEL_NAME,
+        model_params={"format": "json", "options": {"temperature": 0}}
+    )
 
     rag = GraphRAG(
         retriever=retriever,

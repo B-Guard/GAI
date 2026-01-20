@@ -1,0 +1,39 @@
+{
+  "node_types": [
+    { "label": "Concept", "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Method",  "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Model",   "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Dataset", "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Metric",  "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Tool",    "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true },
+    { "label": "Paper", "properties": [{ "name": "name", "type": "STRING" }], "required_properties": ["name"], "additional_properties_allowed": true }
+  ],
+  "relationship_types": [
+    { "label": "DEFINES" },
+    { "label": "USES" },
+    { "label": "EVALUATED_BY" },
+    { "label": "IMPROVES" },
+    { "label": "COMPARES_WITH" },
+    { "label": "PART_OF" },
+    { "label": "MENTIONS" }
+  ],
+  "patterns": [
+    ["Concept", "PART_OF", "Concept"],
+    ["Concept", "MENTIONS", "Concept"],
+
+    ["Method", "USES", "Tool"],
+    ["Model", "EVALUATED_BY", "Metric"],
+    ["Method", "EVALUATED_BY", "Metric"],
+
+    ["Method", "IMPROVES", "Method"],
+    ["Model", "IMPROVES", "Model"],
+
+    ["Concept", "DEFINES", "Concept"],
+    ["Paper", "DEFINES", "Concept"],
+    ["Paper", "COMPARES_WITH", "Paper"],
+    ["Model", "COMPARES_WITH", "Model"]
+  ],
+  "additional_node_types": false,
+  "additional_relationship_types": false,
+  "additional_patterns": false
+}

@@ -35,13 +35,23 @@ INDEX_NAME = os.getenv("NEO4J_VECTOR_INDEX", "chunk_embedding_idx")
 INGEST_TIMEOUT_SEC = int(os.getenv("INGEST_TIMEOUT_SEC", "1500"))
 
 RETRIEVAL_QUERY = """
-OPTIONAL MATCH (node)-[]-(nbr)
+WITH node, score
+OPTIONAL MATCH (node)-[r]-(nbr)
+WITH node, score, r, nbr,
+     coalesce(
+        nbr.name,
+        nbr.title,
+        nbr.path,
+        CASE WHEN exists(nbr.text) THEN left(nbr.text, 160) END,
+        CASE WHEN exists(nbr.content) THEN left(nbr.content, 160) END
+     ) AS surface
+WHERE surface IS NOT NULL AND trim(surface) <> ""
 WITH node, score,
-     collect(DISTINCT coalesce(nbr.name, nbr.title, nbr.path))[0..10] AS neigh
+     collect(DISTINCT type(r) + " -> " + surface)[0..12] AS neigh
 RETURN
-  (coalesce(node.text, node.content, '') +
+  ("Chunk:\n" + coalesce(node.text, node.content, '') +
    "\n\nGraph neighbors:\n" +
-   reduce(s = "", x IN neigh | s + "- " + toString(x) + "\n")
+   reduce(s = "", x IN neigh | s + "- " + x + "\n")
   ) AS text,
   score AS score
 """
@@ -203,8 +213,10 @@ class Neo4jRetriever(VectorStore):
         except Exception:
             return False
 
-    def _get_schema(self) -> str:
-        return "FREE"
+    def _get_schema(self):
+        import json
+        with open("schema_gai.json", "r", encoding="utf-8") as f:
+            return json.load(f)
 
     def _doc_hash(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
