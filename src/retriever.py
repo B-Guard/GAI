@@ -59,7 +59,7 @@ RETURN
 
 class VectorStore:
     @abstractmethod
-    def ingest(self, file_pattern: str):
+    async def ingest(self, file_pattern: str):
         pass
 
     @abstractmethod
@@ -74,6 +74,7 @@ class FaissVectorStore(VectorStore):
         self.texts = []
         self.embeddings = None
         self.vector_store_path = vector_store_path
+        self.chunk_hashes = set()  # Track hashes of ingested chunks
         # Try to load existing vector store if it exists
         if os.path.exists(self.vector_store_path):
             try:
@@ -89,6 +90,7 @@ class FaissVectorStore(VectorStore):
         files = glob.glob(file_pattern, recursive=True)
         new_texts = []
         new_embeddings = []
+        new_hashes = []
         for file in files:
             with open(file, "r", encoding="utf-8") as f:
                 text = f.read()
@@ -105,11 +107,15 @@ class FaissVectorStore(VectorStore):
                     )
                 chunks = splitter.split_text(text)
                 for chunk in chunks:
+                    chunk_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
+                    if chunk_hash in self.chunk_hashes:
+                        continue  # Skip already ingested chunk
                     new_texts.append(chunk)
                     emb = self.model.encode(chunk, convert_to_numpy=True)
                     new_embeddings.append(emb)
+                    new_hashes.append(chunk_hash)
         if not new_embeddings:
-            print("No files matched.")
+            print("No new chunks to ingest (all already ingested or no files matched).")
             return
         new_embeddings = np.stack(new_embeddings).astype("float32")
         faiss.normalize_L2(new_embeddings)
@@ -123,14 +129,16 @@ class FaissVectorStore(VectorStore):
             self.texts.extend(new_texts)
             self.embeddings = np.vstack([self.embeddings, new_embeddings])
             self.index.add(new_embeddings)
+            self.chunk_hashes.update(new_hashes)
         else:
             dim = new_embeddings.shape[1]
             self.index = faiss.IndexFlatIP(dim)
             self.index.add(new_embeddings)
             self.texts = new_texts
             self.embeddings = new_embeddings
+            self.chunk_hashes = set(new_hashes)
         print(
-            f"Ingested {len(new_texts)} chunks from {len(files)} files into the FAISS vector store."
+            f"Ingested {len(new_texts)} new chunks from {len(files)} files into the FAISS vector store."
         )
         self.save(self.vector_store_path)
 
@@ -157,6 +165,7 @@ class FaissVectorStore(VectorStore):
                     "index": self.index,
                     "texts": self.texts,
                     "embeddings": self.embeddings,
+                    "chunk_hashes": list(self.chunk_hashes),
                 },
                 f,
             )
@@ -167,6 +176,7 @@ class FaissVectorStore(VectorStore):
             self.index = data["index"]
             self.texts = data["texts"]
             self.embeddings = data["embeddings"]
+            self.chunk_hashes = set(data.get("chunk_hashes", []))
 
 
 class Neo4jRetriever(VectorStore):
