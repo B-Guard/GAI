@@ -320,5 +320,6 @@ class Neo4jRetriever(VectorStore):
 
             m2 = re.search(r'text="(.*)"\s+score=', record.content, re.DOTALL)
             text = m2.group(1) if m2 else record.content
-            context.append((text.replace("\\n", "\n"), score))
+            if score is None or score > 0.2:
+                context.append((text.replace("\\n", "\n"), score))
         return context

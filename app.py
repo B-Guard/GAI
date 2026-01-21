@@ -217,7 +217,7 @@ else:
                                 # Add unique anchor for this message's sources
                                 st.markdown(f'<div id="msg{msg_idx}-source-{i}"></div>', unsafe_allow_html=True)
                                 st.markdown(f"**Source {i}:**")
-                                st.text(source[:500] + "..." if len(source) > 500 else source)
+                                st.text(source[5:505].strip() + "..." if len(source) > 500 else source[5:].strip())
                                 st.divider()
                     # Add to messages
                     st.session_state.messages.append({
