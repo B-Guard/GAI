@@ -1,3 +1,14 @@
+__pycache__/
 *venv
 .idea
 .vscode
+.env
+
+*.pkl
+#*.json
+
+neo4jdata/
+
+neo4jlogs/
+
+neo4jplugins/*.jar
