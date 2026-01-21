@@ -19,7 +19,7 @@ A retrieval-augmented generation (RAG) chatbot designed to help students find in
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
-- [Detailed Usage](#-detailed-usage)
+- [Usage](#-usage)
   - [FAISS Retriever](#1-faiss-retriever)
   - [Neo4j GraphRAG](#2-neo4j-graphrag)
   - [Web UI (Streamlit)](#3-web-ui-streamlit)
@@ -193,7 +193,7 @@ streamlit run app.py
 
 ---
 
-## 📚 Detailed Usage
+## Usage
 
 ### 1. FAISS Retriever
 
