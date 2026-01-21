@@ -79,7 +79,7 @@ class RAGChat:
         sources = self._format_sources(sources_and_scores)
         yield None, sources
 
-    def answer(self, question: str) -> tuple[str, list[str]]:
+    def answer(self, question: str, stream: bool = False) -> tuple[str, list[str]]:
         """
         Returns the full answer and sources for the given question (non-streaming).
         """

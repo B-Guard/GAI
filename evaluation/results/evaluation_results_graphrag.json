@@ -1,0 +1,79 @@
+{
+  "model": "Neo4j GraphRAG",
+  "summary": {
+    "faithfulness": 0.8400000000000001,
+    "relevancy": 0.9,
+    "correctness": 0.6,
+    "context_relevance": 0.8400000000000001
+  },
+  "overall_average": 0.795,
+  "config": {
+    "top_k": 5,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "chat_model": "llama3.2:latest",
+    "neo4j_uri": "neo4j://localhost:7687",
+    "index_name": "chunk_embedding_idx"
+  },
+  "test_cases": [
+    {
+      "question": "What is attention in transformers?",
+      "answer": "Attention in transformers allows all of these lists of numbers, a chance to talk to one another, and refine the meanings they encode based on the context around, all done in parallel. [s3]",
+      "ground_truth": "In the last chapter, you and I started to step through the internal workings of a transformer. This is one of the key pieces of technology inside large language models and a lot of other tools in the modern wave of AI. It first hit the scene in a now-famous 2017 paper called Attention is All You Need, and in this chapter, you and I will dig into what this attention mechanism is, visualizing how it processes data. As a quick recap, here's the important context I want you to have in mind. The goal...",
+      "num_contexts": 5,
+      "scores": {
+        "faithfulness": 0.8,
+        "relevancy": 0.8,
+        "correctness": 0.2,
+        "context_relevance": 1.0
+      }
+    },
+    {
+      "question": "Explain how gradient descent works in neural networks",
+      "answer": "Gradient descent is an optimization algorithm used to minimize the cost function of a neural network. It's a way for the network to converge towards a local minimum of the cost function, which represents the error between the predicted output and the actual output.\n\nHere's how it works:\n\n1. The network takes in a batch of training examples, each with input data and corresponding labels.\n2. For each example, the network computes the gradient of the cost function with respect to its weights and biases. This gradient vector tells us which changes to make to the weights and biases will result in the largest decrease in the cost function.\n3. The network then uses this gradient vector to update its weights and biases. This is done by subtracting a fraction of the gradient from the current weight or bias, multiplied by a learning rate (a hyperparameter that controls how quickly the network learns).\n4. Steps 2-3 are repeated for all examples in the batch.\n5. The process is repeated for multiple batches, with the network adjusting its weights and biases after each iteration.\n\nThe key idea behind gradient descent is that it's trying to find the direction of steepest descent (i.e., the direction of maximum negative curvature) of the cost function. By moving in this direction, the network can minimize the cost function and improve its performance on the training data.\n\nIn practice, gradient descent is often used in conjunction with other techniques, such as regularization and batch normalization, to improve the stability and efficiency of the optimization process.\n\n[s4]",
+      "ground_truth": "last video i laid out the structure of a neural network i'll give a quick recap here just so that it's fresh in our minds and then i have two main goals for this video the first is to introduce the idea of gradient descent which underlies not only how neural networks learn but how a lot of other machine learning works as well then after that we're going to dig in a little more to how this particular network performs and what those hidden layers of neurons end up actually looking for so here we l...",
+      "num_contexts": 5,
+      "scores": {
+        "faithfulness": 0.8,
+        "relevancy": 0.9,
+        "correctness": 0.8,
+        "context_relevance": 0.8
+      }
+    },
+    {
+      "question": "How does backpropagation work?",
+      "answer": "Backpropagation is an algorithm used in machine learning to train artificial neural networks. It works by iteratively adjusting the weights and biases of the network to minimize the error between its predictions and the actual labels.\n\nHere's a simplified overview of how backpropagation works:\n\n1. The network is trained on a dataset, with each example consisting of input data and corresponding labels.\n2. For each training example, the network calculates the cost or loss function, which measures the difference between the predicted output and the actual label.\n3. The cost function is then used to compute the gradient of the loss with respect to each weight and bias in the network.\n4. The gradients are computed using a process called backpropagation, where the error is propagated backwards through the network, layer by layer.\n5. At each layer, the gradients are computed using the chain rule of calculus, which allows us to compute the partial derivatives of the loss with respect to each weight and bias.\n6. The gradients are then used to update the weights and biases of the network, which involves adjusting them in a direction that minimizes the loss function.\n7. This process is repeated for all training examples, with the network adjusting its weights and biases to minimize the overall loss function.\n\nIn more detail, backpropagation works as follows:\n\n* For each layer in the network, compute the error gradient of the loss with respect to the output of that layer.\n* Use the chain rule to propagate this error gradient backwards through the network, layer by layer.\n* At each layer, compute the partial derivatives of the loss with respect to the weights and biases of that layer.\n* Update the weights and biases using these gradients, which involves adjusting them in a direction that minimizes the loss function.\n\nOverall, backpropagation is an efficient algorithm for training neural networks, as it allows us to update the weights and biases of the network in a way that minimizes the overall loss function.",
+      "ground_truth": "Here we tackle backpropagation, the core algorithm behind how neural networks learn. After a quick recap for where we are, the first thing I'll do is an intuitive walkthrough for what the algorithm is actually doing, without any reference to the formulas. Then, for those of you who do want to dive into the math, the next video goes into the calculus underlying all this. So I'm going to start things off here with a complete disregard for the notation, and just step through those effects that each...",
+      "num_contexts": 5,
+      "scores": {
+        "faithfulness": 0.9,
+        "relevancy": 1.0,
+        "correctness": 0.8,
+        "context_relevance": 0.8
+      }
+    },
+    {
+      "question": "How do LLMs work?",
+      "answer": "LLMs (Large Language Models) are a type of deep learning model that have achieved state-of-the-art results in various natural language processing tasks such as text classification, sentiment analysis, and language translation. [s4]\n\nAccording to the provided sources, LLMs work by taking an input sequence of tokens and generating a probability distribution over all possible next tokens. This is done using a policy denoted by \u03c0\u03b8, where \u03b8 are the model parameters. The policy produces a probability distribution over all actions or tokens, which is then sampled to select the next token in the sequence.\n\nIn other words, LLMs work by predicting the next token in a sequence based on the context of the previous tokens. This process is repeated for each token in the input sequence, allowing the model to generate coherent and contextually relevant text.\n\nIt's worth noting that LLMs are trained using reinforcement learning algorithms such as Proximal Policy Optimization (PPO), which helps align the model with human preference and turns regular LLMs into reasoning models. [s4]\n\nAdditionally, some LLMs use a technique called diffusion-based training, where they generate images by adding noise to an original image and then predicting the original image from the noisy version. This process is repeated multiple times, allowing the model to learn a time-varying vector field that captures the structure of the input data. [s3]\n\nOverall, LLMs work by using complex algorithms and techniques such as reinforcement learning and diffusion-based training to generate coherent and contextually relevant text.",
+      "ground_truth": "Imagine you happen across a short movie script that describes a scene between a person and their AI assistant. The script has what the person asks the AI, but the AI's response has been torn off. Suppose you also have this powerful magical machine that can take any text and provide a sensible prediction of what word comes next. You could then finish the script by feeding in what you have to the machine, seeing what it would predict to start the AI's answer, and then repeating this over and over ...",
+      "num_contexts": 5,
+      "scores": {
+        "faithfulness": 0.9,
+        "relevancy": 1.0,
+        "correctness": 0.8,
+        "context_relevance": 0.8
+      }
+    },
+    {
+      "question": "What is proximal policy optimization?",
+      "answer": "Proximal Policy Optimization (PPO) is a reinforcement learning algorithm that helps align Large Language Models (LLMs) with human preference and turns regular LLMs into reasoning models. [s1]",
+      "ground_truth": "Proximal Policy Optimization, or PPO, is a reinforcement learning algorithm that helps align LLMs with human preference and also turns regular LLMs into reasoning models, like OpenAI's O1 models, Clot 3.7, GRUC3, and so on. But if you've ever tried reading the original OpenAI paper, then you know it's dense. It has these cryptic equations and it builds on top of decades of research. That includes, by the way, the work by this year's Turing Award winners, Bartow and Sutton. Unfortunately, this do...",
+      "num_contexts": 5,
+      "scores": {
+        "faithfulness": 0.8,
+        "relevancy": 0.8,
+        "correctness": 0.4,
+        "context_relevance": 0.8
+      }
+    }
+  ]
+}
